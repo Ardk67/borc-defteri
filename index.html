@@ -324,14 +324,14 @@
   <div class="kutu">
     <div class="logoB"><svg><use href="#i-defter"/></svg></div>
     <h2>Borç <span>Defteri</span></h2>
-    <div class="alt" id="girisAlt">Giriş yap, kayıtların bulutta güvende olsun.</div>
+    <div class="alt" id="girisAlt">Sana verilen e-posta ve şifreyle giriş yap.</div>
     <input type="email" id="gEmail" placeholder="E-posta" autocomplete="email" inputmode="email">
     <input type="password" id="gSifre" placeholder="Şifre (en az 6 karakter)" autocomplete="current-password">
     <div class="hata" id="gHata"></div>
     <button class="ekle" id="gGiris">Giriş yap</button>
-    <button class="ikinci" id="gKayit">Yeni hesap oluştur</button>
+    <button class="ikinci" id="gKayit" hidden>Yeni hesap oluştur</button>
     <button class="link" id="gUnut">Şifremi unuttum</button>
-    <button class="link" id="gAtla">Şimdilik hesapsız devam et</button>
+    <button class="link" id="gAtla" hidden>Şimdilik hesapsız devam et</button>
     <div class="bilgi">Telefon kırılsa, kaybolsa, yenisi alınsa bile aynı e-posta ile girince bütün kayıtlar geri gelir. İnternet yokken de çalışır, bağlanınca kendiliğinden eşitler.</div>
   </div>
 </div>
@@ -838,7 +838,7 @@ window.app.isletmeleriAl = (liste)=>{ if(!liste.length) return; isletmeler = lis
   Boş bırakılırsa uygulama eskisi gibi sadece telefonda çalışır, giriş ekranı çıkmaz. -->
 <script>
 // Firebase → Project settings → Cloud Messaging → Web Push certificates → "Key pair"
-window.VAPID_KEY = "";
+window.VAPID_KEY = "BEMezPXZex9FP-_W2EBLzaJLdnaRJW_WZO5GT5TsZ34gRGytyaQdLsOiMIDMJXS1afnbuvjkzScBhNuN4VwffhI";
 window.FIREBASE_CONFIG = {
   apiKey: "AIzaSyCCiX_wv52WcP1GEq-plaRp5m5J3ZuWglA",
   authDomain: "borc-defteri-ef807.firebaseapp.com",
@@ -2424,7 +2424,7 @@ if(cfg && cfg.apiKey){ try {
 
   const $ = (id)=>document.getElementById(id);
   const giris = $('giris'), gHata = $('gHata');
-  const hataYaz = (e)=>{ const m={'auth/invalid-email':'E-posta hatalı.','auth/user-not-found':'Bu e-posta ile hesap yok, "Yeni hesap oluştur" de.','auth/wrong-password':'Şifre yanlış.','auth/invalid-credential':'E-posta ya da şifre yanlış.','auth/email-already-in-use':'Bu e-posta zaten kayıtlı, "Giriş yap" de.','auth/weak-password':'Şifre en az 6 karakter olmalı.','auth/network-request-failed':'İnternet yok gibi, tekrar dene.','auth/too-many-requests':'Çok denedin, biraz bekle.'}; gHata.textContent = m[e.code] || ('Hata: '+(e.message||e)); gHata.style.display='block'; };
+  const hataYaz = (e)=>{ const m={'auth/invalid-email':'E-posta hatalı.','auth/user-not-found':'Bu e-posta ile hesap yok, "Yeni hesap oluştur" de.','auth/wrong-password':'Şifre yanlış.','auth/invalid-credential':'E-posta ya da şifre yanlış.','auth/email-already-in-use':'Bu e-posta zaten kayıtlı, "Giriş yap" de.','auth/weak-password':'Şifre en az 6 karakter olmalı.','auth/network-request-failed':'İnternet yok gibi, tekrar dene.','auth/too-many-requests':'Çok denedin, biraz bekle.','auth/admin-restricted-operation':'Yeni hesap açılamıyor. Hesap için yöneticiye yaz.','auth/operation-not-allowed':'Yeni hesap açılamıyor. Hesap için yöneticiye yaz.'}; gHata.textContent = m[e.code] || ('Hata: '+(e.message||e)); gHata.style.display='block'; };
   const al = ()=>({ email:$('gEmail').value.trim(), sifre:$('gSifre').value });
   $('gGiris').onclick = async ()=>{ const {email,sifre}=al(); if(!email||!sifre) return hataYaz({code:'auth/invalid-credential'}); try{ await signInWithEmailAndPassword(auth,email,sifre); }catch(e){ hataYaz(e); } };
   $('gKayit').onclick = async ()=>{ const {email,sifre}=al(); try{ await createUserWithEmailAndPassword(auth,email,sifre); window.app.toast('Hesap oluşturuldu'); }catch(e){ hataYaz(e); } };
