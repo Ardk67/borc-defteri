@@ -253,7 +253,7 @@
     <div><h1><span class="logo"><svg><use href="#i-defter"/></svg></span>Borç <span>Defteri</span></h1><div class="bugun" id="bugun"></div><button class="isletmeBtn" id="isletmeBtn"><span id="isletmeAd">İşletme</span></button><div class="durum yerel" id="durum">Sadece bu telefonda</div></div>
     <div class="ustBtnlar">
       <button class="ustBtn ikon" id="temaBtn" aria-label="Karanlık mod"><svg><use href="#i-ay"/></svg></button>
-      <button class="ustBtn" id="yedekAc"><svg><use href="#i-yedek"/></svg>Yedek</button>
+      <button class="ustBtn" id="yedekAc"><svg><use href="#i-yedek"/></svg>Hesap</button>
     </div>
   </div>
   <div class="aciklama"><i class="a">A · Alacaklı: bizden alacağı var</i><i class="b">B · Borçlu: bize borcu var</i></div>
@@ -459,7 +459,7 @@ function isletmeSec(id){ aktifIsletme=id; try{ localStorage.setItem(AKTIF_KEY,id
 function isletmeCiz(){
   const a = isletmeler.find(i=>i.id===aktifIsletme);
   document.getElementById('isletmeAd').textContent = a ? a.ad : 'İşletme seç';
-  document.getElementById('ilkKurulum').hidden = isletmeler.length>0 || !document.getElementById('giris').hidden;
+  document.getElementById('ilkKurulum').hidden = isletmeler.length>0 || !document.getElementById('giris').hidden || !window.bulut.hazir;
   const L = document.getElementById('isletmeListe');
   L.innerHTML = isletmeler.map(i=>{ const n = kayitlar.filter(k=>k.isletme===i.id).length; return `<button data-isl="${i.id}" class="${i.id===aktifIsletme?'secili':''}"><span class="ik">${esc(i.ad.trim()[0]||'?').toLocaleUpperCase('tr')}</span><span>${esc(i.ad)}<small>${n} kayıt</small></span><span class="duzen" data-isldz="${i.id}">Düzenle</span></button>`; }).join('');
   L.querySelectorAll('[data-isl]').forEach(b=>b.onclick=(e)=>{ if(e.target.dataset.isldz) return; isletmeSec(b.dataset.isl); document.getElementById('isletmePerde').classList.remove('gorun'); toast(isletmeler.find(i=>i.id===b.dataset.isl).ad+' açıldı'); });
@@ -471,7 +471,7 @@ document.getElementById('isletmePerde').onclick = (e)=>{ if(e.target.id==='islet
 document.getElementById('yeniIsletmeEkle').onclick = ()=>{ const v=document.getElementById('yeniIsletmeAd'); if(!v.value.trim()) { v.focus(); return; } const i=isletmeEkle(v.value); v.value=''; ciz(); document.getElementById('isletmePerde').classList.remove('gorun'); toast(i.ad+' eklendi ve açıldı'); };
 document.getElementById('ilkIsletmeOlustur').onclick = ()=>{ const v=document.getElementById('ilkIsletmeAd').value.trim(); const h=document.getElementById('ilkHata'); if(!v){ h.textContent='İşletme adı yaz.'; h.style.display='block'; return; } isletmeEkle(v); ciz(); toast(v+' oluşturuldu'); };
 // bulut katmanı (aşağıdaki module script dolduruyor)
-window.bulut = { aktif:false, yazildi:null };
+window.bulut = { aktif:false, yazildi:null, hazir:false };
 function durumYaz(m, sinif){ const d=document.getElementById('durum'); d.textContent=m; d.className='durum '+(sinif||''); }
 
 // ayarlar (tema, yazı boyu)
@@ -2269,6 +2269,7 @@ firebase/app/dist/esm/index.esm.js:
 </script>
 <script type="module">
 const cfg = window.FIREBASE_CONFIG;
+if(!(cfg && cfg.apiKey)){ window.bulut.hazir=true; window.app.isletmeCiz(); }
 if(cfg && cfg.apiKey){ try {
   const {initializeApp,getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendPasswordResetEmail,signOut,setPersistence,browserLocalPersistence,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,doc,setDoc,deleteDoc,onSnapshot,writeBatch,getDocs} = window.FB;
   const fapp = initializeApp(cfg);
@@ -2287,7 +2288,7 @@ if(cfg && cfg.apiKey){ try {
   $('gUnut').onclick = async ()=>{ const {email}=al(); if(!email) return hataYaz({code:'auth/invalid-email'}); try{ await sendPasswordResetEmail(auth,email); gHata.style.display='block'; gHata.style.color='var(--altinYazi)'; gHata.textContent='Şifre sıfırlama maili gönderildi, gelen kutusuna bak.'; }catch(e){ hataYaz(e); } };
   $('gAtla').onclick = ()=>{ giris.hidden=true; localStorage.setItem('kuyumcu-atla','1'); window.app.isletmeCiz(); };
   $('hesapBtn').onclick = async ()=>{
-    if(auth.currentUser){ await signOut(auth); localStorage.removeItem('kuyumcu-atla'); location.reload(); }
+    if(auth.currentUser){ await signOut(auth); ['kuyumcu-atla','kuyumcu-borc-defteri','kuyumcu-isletmeler','kuyumcu-aktif-isletme'].forEach(k=>localStorage.removeItem(k)); location.reload(); }
     else { $('yedekPerde').classList.remove('gorun'); localStorage.removeItem('kuyumcu-atla'); giris.hidden=false; }
   };
 
@@ -2311,12 +2312,14 @@ if(cfg && cfg.apiKey){ try {
   };
 
   onAuthStateChanged(auth, async (u)=>{
+    window.bulut.hazir = true;
     if(dinle){ dinle(); dinle=null; } if(dinleIsl){ dinleIsl(); dinleIsl=null; }
     if(!u){
       uid=null; window.bulut.aktif=false; sonBulut={}; sonIsl={};
       $('hesapAd').textContent='Giriş yapılmadı'; $('hesapAlt').textContent='Kayıtlar sadece bu telefonda duruyor.'; $('hesapBtn').textContent='Giriş yap';
       durumYaz('Sadece bu telefonda','yerel');
       giris.hidden = !!localStorage.getItem('kuyumcu-atla');
+      window.app.isletmeCiz();
       return;
     }
     uid=u.uid; window.bulut.aktif=true; giris.hidden=true; window.app.isletmeCiz();
@@ -2349,7 +2352,7 @@ if(cfg && cfg.apiKey){ try {
   });
   window.addEventListener('online', ()=>{ if(uid) durumYaz('Bulutta güvende',''); });
   window.addEventListener('offline', ()=>{ if(uid) durumYaz('Çevrimdışı, bağlanınca eşitlenir','cevrimdisi'); });
-} catch(e){ console.error('bulut yüklenemedi',e); durumYaz('Bulut hatası: '+(e.code||e.message||e),'cevrimdisi'); } }
+} catch(e){ window.bulut.hazir=true; window.app.isletmeCiz(); console.error('bulut yüklenemedi',e); durumYaz('Bulut hatası: '+(e.code||e.message||e),'cevrimdisi'); } }
 </script>
 <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});</script>
 </body>
