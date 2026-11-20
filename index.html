@@ -446,6 +446,8 @@ const IDB = { db:null,
   async sil(k){ const d=await this.ac(); return new Promise(ok=>{ const t=d.transaction('veri','readwrite'); t.objectStore('veri').delete(k); t.oncomplete=()=>ok(); t.onerror=()=>ok(); }); }
 };
 async function oku(){
+  // telefona "bu veriyi kendiliğinden silme" de
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   try{
     let v = await IDB.al(KEY);
     if(v===undefined){ const eski = localStorage.getItem(KEY); v = eski ? JSON.parse(eski) : []; if(eski){ await IDB.koy(KEY,v); localStorage.removeItem(KEY); } }
