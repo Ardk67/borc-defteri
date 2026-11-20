@@ -1,0 +1,16 @@
+name: Hatırlatma bildirimleri
+on:
+  schedule:
+    - cron: '0 6 * * *'   # her gün 09:00 Türkiye saati
+  workflow_dispatch:
+jobs:
+  gonder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm i firebase-admin@12 --no-save --silent
+      - run: node .github/scripts/hatirlat.mjs
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
