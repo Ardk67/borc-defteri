@@ -26,7 +26,6 @@
     --golge:rgba(0,0,0,.45); --golge2:rgba(0,0,0,.25);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
   html,body{background:var(--kagit);color:var(--murekkep);font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:18px;-webkit-text-size-adjust:100%;transition:background .3s,color .3s}
   body{min-height:100vh;padding-bottom:80px;background-image:radial-gradient(var(--nokta) 1px,transparent 1px);background-size:22px 22px}
   button{font-family:inherit}
@@ -125,6 +124,8 @@
   .grup .harf{position:sticky;top:104px;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--altin),var(--altinK));color:#fff;font-weight:800;font-size:17px;box-shadow:0 3px 10px rgba(201,152,46,.35);margin-bottom:8px}
 
   /* kaydırarak sil */
+  .devam{display:block;width:100%;margin:2px 0 12px;padding:13px;border:1.5px dashed var(--altin2);background:var(--altin3);color:var(--altinYazi);border-radius:14px;font-size:14px;font-weight:700;cursor:pointer}
+  .devam[hidden]{display:none}
   .kaydir{position:relative;border-radius:18px;margin-bottom:10px;overflow:hidden;animation:gel .35s ease both}
   .kaydir .arka{position:absolute;inset:0;background:#b53a2b;color:#fff;display:flex;align-items:center;padding-left:22px;gap:8px;font-weight:800;font-size:16px;opacity:0;transition:opacity .15s}
   .kaydir .arka svg{width:22px;height:22px;transition:transform .15s}
@@ -437,20 +438,27 @@ let cins = 'TL', tur = 'A', vadeSecim = '14', filtre = 'hepsi';
 const IFRAME = (()=>{ try{ return window.top!==window.self; }catch(e){ return true; } })();
 
 let depo = null;
+// Kayıtlar IndexedDB'de (yüzlerce MB alan); localStorage'daki eski kayıtlar ilk açılışta taşınır.
+const IDB = { db:null,
+  ac(){ return this.db ? Promise.resolve(this.db) : new Promise((ok,no)=>{ const r=indexedDB.open('borc-defteri',1); r.onupgradeneeded=()=>r.result.createObjectStore('veri'); r.onsuccess=()=>{this.db=r.result; ok(this.db);}; r.onerror=()=>no(r.error); }); },
+  async al(k){ const d=await this.ac(); return new Promise((ok,no)=>{ const t=d.transaction('veri').objectStore('veri').get(k); t.onsuccess=()=>ok(t.result); t.onerror=()=>no(t.error); }); },
+  async koy(k,v){ const d=await this.ac(); return new Promise((ok,no)=>{ const t=d.transaction('veri','readwrite'); t.objectStore('veri').put(v,k); t.oncomplete=()=>ok(); t.onerror=()=>no(t.error); }); },
+  async sil(k){ const d=await this.ac(); return new Promise(ok=>{ const t=d.transaction('veri','readwrite'); t.objectStore('veri').delete(k); t.oncomplete=()=>ok(); t.onerror=()=>ok(); }); }
+};
 async function oku(){
-  if (window.storage) {
-    try { const r = await window.storage.get(KEY,false); depo='storage'; return r ? JSON.parse(r.value) : []; }
-    catch(e){ if(!/not available/i.test(String(e))) { depo='storage'; return []; } }
-  }
+  try{
+    let v = await IDB.al(KEY);
+    if(v===undefined){ const eski = localStorage.getItem(KEY); v = eski ? JSON.parse(eski) : []; if(eski){ await IDB.koy(KEY,v); localStorage.removeItem(KEY); } }
+    depo='idb'; return v||[];
+  }catch(e){ console.error('idb oku',e); }
   try { const v = localStorage.getItem(KEY); depo='local'; return v ? JSON.parse(v) : []; } catch(e){}
   depo='yok'; return [];
 }
 let yaz = async function(){
-  const s = JSON.stringify(kayitlar);
-  if (depo!=='local' && window.storage) { try { await window.storage.set(KEY,s,false); depo='storage'; return; } catch(e){} }
-  try { localStorage.setItem(KEY,s); depo='local'; return; } catch(e){}
+  if(depo!=='local'){ try{ await IDB.koy(KEY, JSON.parse(JSON.stringify(kayitlar))); depo='idb'; return; }catch(e){ console.error('idb yaz',e); } }
+  try { localStorage.setItem(KEY,JSON.stringify(kayitlar)); depo='local'; return; } catch(e){}
   depo='yok';
-  document.getElementById('bildirimAlan').innerHTML = 'Bu önizlemede kayıt saklanamıyor. Dosyayı telefonda tarayıcıdan açınca kayıtlar kalıcı olur.';
+  document.getElementById('bildirimAlan').innerHTML = 'Telefonda yer kalmadı ya da kayıt engellendi. Kayıtlar bulutta güvende, telefonda biraz yer aç.';
 }
 const normalize = (k)=>({ tel:'', ...k, vade: k.vade===null ? null : (k.vade || (k.tarih + 14*GUN)) });
 const geldi = (k)=> !!k.vade && Date.now()>=k.vade;
@@ -682,6 +690,55 @@ function kaydirKur(wrap){
   kart.addEventListener('touchend',bitir); kart.addEventListener('touchcancel',bitir);
 }
 
+let listeGruplar = {}, listeQ = '', cizilen = {}, listeSira = [];
+
+function kartHTML(k,q){
+  const gec = geldi(k), kal = k.vade ? kalanGun(k.vade) : 0, g = gunFarki(k.tarih);
+  const odeme = (k.odemeler||[]).length ? `<div class="odemeler"><b>Ödemeler</b>${k.odemeler.map((o,oi)=>`<span data-od="${k.id}" data-oi="${oi}">${birim(k.cins,o.miktar)} <i>${tarihKisa(o.tarih)}</i></span>`).join('')}</div>` : '';
+  return `<div class="kaydir" data-id="${k.id}">
+    <div class="arka"><svg><use href="#i-sil"/></svg>Sil</div>
+    <div class="kart ${k.tur} ${gec?'gec':''}">
+      <div class="ustkisim">
+        <div class="avatar">${esc(bas(k.isim))}</div>
+        <div class="bilgi">
+          <div class="isim">${vurgula(k.isim,q)}</div>
+          ${k.tel?`<div class="telno">${esc(k.tel)}</div>`:''}
+          <div class="tutar">${birim(k.cins,k.miktar,true)}<span class="etiket">${k.tur==='A'?'A · Alacaklı':'B · Borçlu'}</span></div>
+          ${k.not?`<div class="not">${esc(k.not)}</div>`:''}${odeme}
+          <div class="tarihler">
+            <div>Yazıldı<b>${tarihKisa(k.tarih)}</b></div>
+            <div class="son">Hatırlatma<b>${k.vade ? tarihKisa(k.vade)+(gec?' · geldi!':'') : 'Yok'}</b></div>
+            ${k.vade ? `<div>${gec?'Geçen':'Kalan'}<b>${gec?(g===0?'bugün':g+' gün'):kal+' gün'}</b></div>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="islemler">
+        ${k.tel?`<button class="ara" data-tel="${esc(k.tel)}"><svg><use href="#i-tel"/></svg>Ara</button><button class="wa" data-wa="${esc(k.tel)}"><svg><use href="#i-wa"/></svg>WhatsApp</button>`:''}
+        <button class="ode" data-ode="${k.id}"><svg><use href="#i-ode"/></svg>Ödeme yaz</button>
+        <button class="duz" data-duzen="${k.id}"><svg><use href="#i-duz"/></svg>Düzenle</button>
+        <button class="silb" data-sil="${k.id}"><svg><use href="#i-sil"/></svg>Sil</button>
+      </div>
+    </div>
+  </div>`;
+}
+function grupDevam(hh, adet){
+  const L = listeGruplar[hh]; if(!L) return;
+  const bas0 = cizilen[hh]||0; if(bas0>=L.length) return;
+  const son = Math.min(L.length, bas0 + (adet||40));
+  const kap = document.querySelector(`.kartlar[data-g="${hh}"]`); if(!kap) return;
+  const tmp = document.createElement('div'); tmp.innerHTML = L.slice(bas0,son).map(k=>kartHTML(k,listeQ)).join('');
+  tmp.querySelectorAll('[data-sil]').forEach(b=>b.onclick=()=>panelAc('sil',b.dataset.sil));
+  tmp.querySelectorAll('[data-ode]').forEach(b=>b.onclick=()=>panelAc('ode',b.dataset.ode));
+  tmp.querySelectorAll('[data-tel]').forEach(b=>b.onclick=()=>telAra(b.dataset.tel));
+  tmp.querySelectorAll('[data-wa]').forEach(b=>b.onclick=()=>waAc(b.dataset.wa));
+  tmp.querySelectorAll('[data-duzen]').forEach(b=>b.onclick=()=>duzenAc(b.dataset.duzen));
+  tmp.querySelectorAll('[data-od]').forEach(b=>b.onclick=()=>odemeDuzenAc(b.dataset.od, +b.dataset.oi));
+  tmp.querySelectorAll('.kaydir').forEach(kaydirKur);
+  while(tmp.firstChild) kap.appendChild(tmp.firstChild);
+  cizilen[hh] = son;
+  const d = document.querySelector(`.devam[data-g="${hh}"]`);
+  if(d){ const kalan = L.length-son; d.hidden = kalan<=0; d.textContent = `${hh} harfinde ${kalan.toLocaleString('tr-TR')} kayıt daha · Daha fazla göster`; }
+}
 function ciz(){
   const q = araInput.value.trim().toLocaleLowerCase('tr');
   const liste = document.getElementById('liste');
@@ -711,45 +768,17 @@ function ciz(){
   if(!gorunen.length){
     liste.innerHTML = `<div class="bos">${K.length ? 'Bu filtreye uyan kayıt yok.' : 'Bu işletmenin defteri boş.<br>Yukarıdan ilk kaydı ekle.'}</div>`;
   } else {
-    liste.innerHTML = [...HARFLER,'#'].filter(hh=>gruplar[hh]).map((hh,gi)=>`
+    // Binlerce kayıtta telefon donmasın: her harf grubunun kartları ekrana yaklaşınca 40'ar 40'ar çizilir.
+    listeGruplar = gruplar; listeQ = q; cizilen = {};
+    liste.innerHTML = [...HARFLER,'#'].filter(hh=>gruplar[hh]).map(hh=>`
       <div class="grup" id="harf-${hh}">
         <div class="harf">${hh}</div>
-        ${gruplar[hh].map((k,i)=>{
-          const gec = geldi(k), kal = k.vade ? kalanGun(k.vade) : 0, g = gunFarki(k.tarih);
-          const odeme = (k.odemeler||[]).length ? `<div class="odemeler"><b>Ödemeler</b>${k.odemeler.map((o,oi)=>`<span data-od="${k.id}" data-oi="${oi}">${birim(k.cins,o.miktar)} <i>${tarihKisa(o.tarih)}</i></span>`).join('')}</div>` : '';
-          return `<div class="kaydir" data-id="${k.id}" style="animation-delay:${Math.min((gi*3+i)*30,300)}ms">
-            <div class="arka"><svg><use href="#i-sil"/></svg>Sil</div>
-            <div class="kart ${k.tur} ${gec?'gec':''}">
-              <div class="ustkisim">
-                <div class="avatar">${bas(k.isim)}</div>
-                <div class="bilgi">
-                  <div class="isim">${vurgula(k.isim,q)}</div>
-                  ${k.tel?`<div class="telno">${esc(k.tel)}</div>`:''}
-                  <div class="tutar">${birim(k.cins,k.miktar,true)}<span class="etiket">${k.tur==='A'?'A · Alacaklı':'B · Borçlu'}</span></div>
-                  ${k.not?`<div class="not">${esc(k.not)}</div>`:''}${odeme}
-                  <div class="tarihler">
-                    <div>Yazıldı<b>${tarihKisa(k.tarih)}</b></div>
-                    <div class="son">Hatırlatma<b>${k.vade ? tarihKisa(k.vade)+(gec?' · geldi!':'') : 'Yok'}</b></div>
-                    ${k.vade ? `<div>${gec?'Geçen':'Kalan'}<b>${gec?(g===0?'bugün':g+' gün'):kal+' gün'}</b></div>` : ''}
-                  </div>
-                </div>
-              </div>
-              <div class="islemler">
-                ${k.tel?`<button class="ara" data-tel="${esc(k.tel)}"><svg><use href="#i-tel"/></svg>Ara</button><button class="wa" data-wa="${esc(k.tel)}"><svg><use href="#i-wa"/></svg>WhatsApp</button>`:''}
-                <button class="ode" data-ode="${k.id}"><svg><use href="#i-ode"/></svg>Ödeme yaz</button>
-                <button class="duz" data-duzen="${k.id}"><svg><use href="#i-duz"/></svg>Düzenle</button>
-                <button class="silb" data-sil="${k.id}"><svg><use href="#i-sil"/></svg>Sil</button>
-              </div>
-            </div>
-          </div>`; }).join('')}
+        <div class="kartlar" data-g="${hh}"></div>
+        <button class="devam" data-g="${hh}" hidden></button>
       </div>`).join('');
-    liste.querySelectorAll('[data-sil]').forEach(b=>b.onclick=()=>panelAc('sil',b.dataset.sil));
-    liste.querySelectorAll('[data-ode]').forEach(b=>b.onclick=()=>panelAc('ode',b.dataset.ode));
-    liste.querySelectorAll('[data-tel]').forEach(b=>b.onclick=()=>telAra(b.dataset.tel));
-    liste.querySelectorAll('[data-wa]').forEach(b=>b.onclick=()=>waAc(b.dataset.wa));
-    liste.querySelectorAll('[data-duzen]').forEach(b=>b.onclick=()=>duzenAc(b.dataset.duzen));
-    liste.querySelectorAll('[data-od]').forEach(b=>b.onclick=()=>odemeDuzenAc(b.dataset.od, +b.dataset.oi));
-    liste.querySelectorAll('.kaydir').forEach(kaydirKur);
+    listeSira = [...HARFLER,'#'].filter(hh=>gruplar[hh]);
+    listeSira.forEach(hh=>grupDevam(hh, 40));
+    liste.querySelectorAll('.devam').forEach(b=>b.onclick=()=>grupDevam(b.dataset.g, 200));
   }
 
   const ray = document.getElementById('ray');
@@ -767,7 +796,7 @@ function ciz(){
     ray.querySelectorAll('span').forEach(s=>s.classList.toggle('secili',s.dataset.h===hh));
     balon.textContent = hh; balon.classList.add('gorun');
     const i = HARFLER.indexOf(hh);
-    for(let j=i;j<HARFLER.length;j++){ const hedef = document.getElementById('harf-'+HARFLER[j]); if(hedef){ hedef.scrollIntoView({block:'start',behavior:'auto'}); titret(8); break; } }
+    for(let j=i;j<HARFLER.length;j++){ const hedef = document.getElementById('harf-'+HARFLER[j]); if(hedef){ hedef.scrollIntoView({block:'start',behavior:'instant'}); titret(8); break; } }
   }
   function bitir(){ aktif=false; sonHarf=null; balon.classList.remove('gorun'); ray.querySelectorAll('span').forEach(s=>s.classList.remove('secili')); }
   ray.addEventListener('touchstart',e=>{ aktif=true; const t=e.touches[0]; git(t.clientX,t.clientY); e.preventDefault(); },{passive:false});
@@ -832,6 +861,7 @@ function eskiKayitlariBagla(){ // işletmesi olmayan eski kayıtlar → aktif (y
   kayitlar.forEach(k=>{ if(!k.isletme){ k.isletme=hedef; n++; } });
   if(n) _yaz();
 }
+window.app.yerelSil = ()=>IDB.sil(KEY);
 window.app.isletmeler = ()=>isletmeler; window.app.isletmeCiz = isletmeCiz;
 window.app.isletmeleriAl = (liste)=>{ if(!liste.length) return; isletmeler = liste; if(!isletmeler.find(i=>i.id===aktifIsletme)) aktifIsletme = isletmeler[0].id; try{ localStorage.setItem(ISL_KEY,JSON.stringify(isletmeler)); }catch(e){} eskiKayitlariBagla(); isletmeCiz(); ciz(); };
 (async ()=>{ isletmeOku(); kayitlar = (await oku()).map(normalize); eskiKayitlariBagla(); isletmeCiz(); formDurum(kayitlar.filter(k=>k.isletme===aktifIsletme).length===0); ciz(); bildirimKur(); })();
@@ -2435,7 +2465,7 @@ if(cfg && cfg.apiKey){ try {
   $('gUnut').onclick = async ()=>{ const {email}=al(); if(!email) return hataYaz({code:'auth/invalid-email'}); try{ await sendPasswordResetEmail(auth,email); gHata.style.display='block'; gHata.style.color='var(--altinYazi)'; gHata.textContent='Şifre sıfırlama maili gönderildi, gelen kutusuna bak.'; }catch(e){ hataYaz(e); } };
   $('gAtla').onclick = ()=>{ giris.hidden=true; localStorage.setItem('kuyumcu-atla','1'); window.app.isletmeCiz(); };
   $('hesapBtn').onclick = async ()=>{
-    if(auth.currentUser){ await signOut(auth); ['kuyumcu-atla','kuyumcu-borc-defteri','kuyumcu-isletmeler','kuyumcu-aktif-isletme'].forEach(k=>localStorage.removeItem(k)); location.reload(); }
+    if(auth.currentUser){ await signOut(auth); ['kuyumcu-atla','kuyumcu-borc-defteri','kuyumcu-isletmeler','kuyumcu-aktif-isletme'].forEach(k=>localStorage.removeItem(k)); try{ await window.app.yerelSil(); }catch(e){} location.reload(); }
     else { $('yedekPerde').classList.remove('gorun'); localStorage.removeItem('kuyumcu-atla'); giris.hidden=false; }
   };
 
