@@ -87,6 +87,7 @@
   .chip.has.on{background:linear-gradient(135deg,var(--altin),var(--altinK));border-color:var(--altin);color:#fff} .chip.has.on small{color:#fff3cf}
   .chip.b.on{background:#b53a2b;border-color:#b53a2b;color:#fff} .chip.b.on small{color:#f7d3ce}
   .chip.a.on{background:#2a5e8c;border-color:#2a5e8c;color:#fff} .chip.a.on small{color:#cfe0f0}
+  .chips.five{grid-template-columns:repeat(5,1fr)} .chips.five .chip{font-size:13.5px;padding:11px 2px}
   #vadeTarih{display:none;margin-top:8px} #vadeTarih.gorun{display:block}
   .ekle{width:100%;margin-top:18px;background:linear-gradient(135deg,var(--altin),var(--altinK));color:#fff;border:0;border-radius:14px;padding:17px;font-size:19px;font-weight:800;cursor:pointer;box-shadow:0 6px 16px rgba(201,152,46,.35)}
   .ekle:active{transform:translateY(1px)}
@@ -284,7 +285,8 @@
         <div class="chip b" data-v="B">B · Borçlu<small>bize borcu var</small></div>
       </div>
       <label class="lbl">Hatırlatma ne zaman?</label>
-      <div class="chips" id="vade">
+      <div class="chips five" id="vade">
+        <div class="chip kucuk" data-v="yok">Yok</div>
         <div class="chip kucuk" data-v="7">1 hafta</div>
         <div class="chip kucuk on" data-v="14">2 hafta</div>
         <div class="chip kucuk" data-v="30">1 ay</div>
@@ -396,7 +398,7 @@
     <label class="lbl">İsim</label><input type="text" id="dIsim">
     <label class="lbl">Telefon</label><input type="tel" id="dTel">
     <label class="lbl">Miktar</label><input type="number" id="dMiktar" inputmode="decimal" step="any">
-    <label class="lbl">Hatırlatma tarihi</label><input type="date" id="dVade">
+    <label class="lbl">Hatırlatma tarihi (boş bırakırsan hatırlatma olmaz)</label><input type="date" id="dVade">
     <label class="lbl">Not</label><input type="text" id="dNot">
     <div class="hata" id="dHata"></div>
     <div class="butonlar">
@@ -450,7 +452,8 @@ let yaz = async function(){
   depo='yok';
   document.getElementById('bildirimAlan').innerHTML = 'Bu önizlemede kayıt saklanamıyor. Dosyayı telefonda tarayıcıdan açınca kayıtlar kalıcı olur.';
 }
-const normalize = (k)=>({ tel:'', ...k, vade: k.vade || (k.tarih + 14*GUN) });
+const normalize = (k)=>({ tel:'', ...k, vade: k.vade===null ? null : (k.vade || (k.tarih + 14*GUN)) });
+const geldi = (k)=> !!k.vade && Date.now()>=k.vade;
 // ---- işletmeler ----
 function isletmeOku(){ try{ isletmeler = JSON.parse(localStorage.getItem(ISL_KEY)||'[]'); aktifIsletme = localStorage.getItem(AKTIF_KEY)||null; }catch(e){ isletmeler=[]; } if(!isletmeler.find(i=>i.id===aktifIsletme)) aktifIsletme = isletmeler[0]?.id || null; }
 let isletmeYaz = function(){ try{ localStorage.setItem(ISL_KEY,JSON.stringify(isletmeler)); if(aktifIsletme) localStorage.setItem(AKTIF_KEY,aktifIsletme); }catch(e){} if(window.bulut.isletmeYazildi) window.bulut.isletmeYazildi(isletmeler); };
@@ -550,6 +553,7 @@ document.getElementById('ekle').onclick = async ()=>{
   if(!(miktar>0)) return goster('Miktar 0\'dan büyük olmalı.');
   let vade;
   if(vadeSecim==='tarih'){ const v = document.getElementById('vadeTarih').value; if(!v) return goster('Hatırlatma tarihi seç.'); vade = new Date(v+'T09:00:00').getTime(); }
+  else if(vadeSecim==='yok') vade = null;
   else vade = Date.now() + parseInt(vadeSecim)*GUN;
   hata.style.display='none';
   if(!aktifIsletme){ return goster('Önce işletme oluştur.'); }
@@ -601,7 +605,7 @@ const duzenPerde = document.getElementById('duzenPerde'); let duzenId = null;
 function duzenAc(id){
   const k = kayitlar.find(x=>x.id===id); if(!k) return; duzenId = id;
   document.getElementById('dIsim').value = k.isim; document.getElementById('dTel').value = k.tel||'';
-  document.getElementById('dMiktar').value = k.miktar; document.getElementById('dVade').value = tarihISO(k.vade);
+  document.getElementById('dMiktar').value = k.miktar; document.getElementById('dVade').value = k.vade ? tarihISO(k.vade) : '';
   document.getElementById('dNot').value = k.not||''; document.getElementById('dHata').style.display='none';
   duzenPerde.classList.add('gorun');
 }
@@ -614,7 +618,7 @@ document.getElementById('dKaydet').onclick = async ()=>{
   if(!isim){ h.textContent='İsim boş olamaz.'; h.style.display='block'; return; }
   if(!(miktar>0)){ h.textContent='Miktar 0\'dan büyük olmalı.'; h.style.display='block'; return; }
   k.isim = isim; k.tel = document.getElementById('dTel').value.trim(); k.miktar = miktar; k.not = document.getElementById('dNot').value.trim();
-  if(v) k.vade = new Date(v+'T09:00:00').getTime();
+  k.vade = v ? new Date(v+'T09:00:00').getTime() : null;
   duzenPerde.classList.remove('gorun'); await yaz(); toast('Kayıt güncellendi'); ciz();
 };
 
@@ -683,12 +687,12 @@ function ciz(){
   const liste = document.getElementById('liste');
   const K = kayitlar.filter(k=>k.isletme===aktifIsletme);
   const gorunen = K
-    .filter(k=>filtre==='hepsi' || (filtre==='vade' ? Date.now()>=k.vade : k.tur===filtre))
+    .filter(k=>filtre==='hepsi' || (filtre==='vade' ? geldi(k) : k.tur===filtre))
     .filter(k=>!q || k.isim.toLocaleLowerCase('tr').includes(q) || (k.tel && telTemiz(q).length>=3 && telTemiz(k.tel).includes(telTemiz(q))))
     .sort((a,b)=>a.isim.localeCompare(b.isim,'tr'));
   document.getElementById('sayi').textContent = K.length ? ((q||filtre!=='hepsi')?`${gorunen.length} / ${K.length} kayıt`:K.length+' kayıt') : '';
 
-  const gecenler = K.filter(k=>Date.now()>=k.vade);
+  const gecenler = K.filter(geldi);
   const h = document.getElementById('hatirlat');
   if(gecenler.length){ h.style.display='block'; document.getElementById('hatirlatMetin').textContent = `${gecenler.length} kaydın hatırlatma günü geldi: `+gecenler.map(k=>k.isim).join(', '); }
   else h.style.display='none';
@@ -711,7 +715,7 @@ function ciz(){
       <div class="grup" id="harf-${hh}">
         <div class="harf">${hh}</div>
         ${gruplar[hh].map((k,i)=>{
-          const gec = Date.now()>=k.vade, kal = kalanGun(k.vade), g = gunFarki(k.tarih);
+          const gec = geldi(k), kal = k.vade ? kalanGun(k.vade) : 0, g = gunFarki(k.tarih);
           const odeme = (k.odemeler||[]).length ? `<div class="odemeler"><b>Ödemeler</b>${k.odemeler.map((o,oi)=>`<span data-od="${k.id}" data-oi="${oi}">${birim(k.cins,o.miktar)} <i>${tarihKisa(o.tarih)}</i></span>`).join('')}</div>` : '';
           return `<div class="kaydir" data-id="${k.id}" style="animation-delay:${Math.min((gi*3+i)*30,300)}ms">
             <div class="arka"><svg><use href="#i-sil"/></svg>Sil</div>
@@ -725,8 +729,8 @@ function ciz(){
                   ${k.not?`<div class="not">${esc(k.not)}</div>`:''}${odeme}
                   <div class="tarihler">
                     <div>Yazıldı<b>${tarihKisa(k.tarih)}</b></div>
-                    <div class="son">Hatırlatma<b>${tarihKisa(k.vade)}${gec?' · geldi!':''}</b></div>
-                    <div>${gec?'Geçen':'Kalan'}<b>${gec?(g===0?'bugün':g+' gün'):kal+' gün'}</b></div>
+                    <div class="son">Hatırlatma<b>${k.vade ? tarihKisa(k.vade)+(gec?' · geldi!':'') : 'Yok'}</b></div>
+                    ${k.vade ? `<div>${gec?'Geçen':'Kalan'}<b>${gec?(g===0?'bugün':g+' gün'):kal+' gün'}</b></div>` : ''}
                   </div>
                 </div>
               </div>
@@ -798,7 +802,7 @@ async function nativeBildirim(){
   try{
     const izin = await LN.requestPermissions(); if(izin.display!=='granted') return true;
     const eski = await LN.getPending(); if(eski.notifications && eski.notifications.length) await LN.cancel(eski);
-    const list = kayitlar.map((k,i)=>({ id: 1000+i, title:'Borç Defteri', body:`${k.isim} — ${birim(k.cins,k.miktar)} (${k.tur==='A'?'Alacaklı':'Borçlu'}) hatırlatma günü geldi`, schedule:{ at:new Date(Math.max(k.vade, Date.now()+60000)) } }));
+    const list = kayitlar.filter(k=>k.vade).map((k,i)=>({ id: 1000+i, title:'Borç Defteri', body:`${k.isim} — ${birim(k.cins,k.miktar)} (${k.tur==='A'?'Alacaklı':'Borçlu'}) hatırlatma günü geldi`, schedule:{ at:new Date(Math.max(k.vade, Date.now()+60000)) } }));
     if(list.length) await LN.schedule({notifications:list});
   }catch(e){ console.error(e); }
   return true;
@@ -808,7 +812,7 @@ async function bildirimKur(){
   const alan = document.getElementById('bildirimAlan');
   if(!('Notification' in window) || depo==='yok') return;
   if(Notification.permission==='granted'){
-    const g = kayitlar.filter(k=>Date.now()>=k.vade);
+    const g = kayitlar.filter(geldi);
     if(g.length) try{ new Notification('Borç Defteri hatırlatma',{body:g.map(k=>k.isim+' — '+birim(k.cins,k.miktar)+' ('+k.tur+')').join('\n')}); }catch(e){}
   } else if(Notification.permission!=='denied'){
     alan.innerHTML = 'Hatırlatma günü gelince telefona bildirim gelsin: <button id="izin">bildirimleri aç</button>';
