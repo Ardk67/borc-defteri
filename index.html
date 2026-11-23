@@ -87,7 +87,14 @@
   .chip.b.on{background:#b53a2b;border-color:#b53a2b;color:#fff} .chip.b.on small{color:#f7d3ce}
   .chip.a.on{background:#2a5e8c;border-color:#2a5e8c;color:#fff} .chip.a.on small{color:#cfe0f0}
   .chips.five{grid-template-columns:repeat(5,1fr)} .chips.five .chip{font-size:13.5px;padding:11px 2px}
-  #vadeTarih{display:none;margin-top:8px} #vadeTarih.gorun{display:block}
+  .saatSatir{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
+  .saatSatir.tarihli{grid-template-columns:1.4fr 1fr}
+  .saatSatir[hidden]{display:none}
+  #vadeTarih{display:none} .saatSatir.tarihli #vadeTarih{display:block}
+  .saatSatir label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--gri)}
+  .ikili{display:grid;grid-template-columns:1.4fr 1fr;gap:8px}
+  .tarihler .son{cursor:pointer}
+  .tarihler .son b{text-decoration:underline dotted;text-underline-offset:3px}
   .ekle{width:100%;margin-top:18px;background:linear-gradient(135deg,var(--altin),var(--altinK));color:#fff;border:0;border-radius:14px;padding:17px;font-size:19px;font-weight:800;cursor:pointer;box-shadow:0 6px 16px rgba(201,152,46,.35)}
   .ekle:active{transform:translateY(1px)}
   .hata{color:var(--kirmizi);font-size:15px;margin-top:10px;display:none}
@@ -293,7 +300,10 @@
         <div class="chip kucuk" data-v="30">1 ay</div>
         <div class="chip kucuk" data-v="tarih">Tarih seç</div>
       </div>
-      <input type="date" id="vadeTarih">
+      <div class="saatSatir" id="saatSatir">
+        <input type="date" id="vadeTarih" aria-label="Hatırlatma tarihi">
+        <input type="time" id="vadeSaat" value="09:00" aria-label="Hatırlatma saati">
+      </div>
       <label class="lbl">Not (isteğe bağlı)</label>
       <input type="text" id="not" placeholder="Örn: bilezik, çeyrek altın…">
       <div class="hata" id="hata"></div>
@@ -399,7 +409,7 @@
     <label class="lbl">İsim</label><input type="text" id="dIsim">
     <label class="lbl">Telefon</label><input type="tel" id="dTel">
     <label class="lbl">Miktar</label><input type="number" id="dMiktar" inputmode="decimal" step="any">
-    <label class="lbl">Hatırlatma tarihi (boş bırakırsan hatırlatma olmaz)</label><input type="date" id="dVade">
+    <label class="lbl">Hatırlatma tarihi ve saati (tarihi boş bırakırsan hatırlatma olmaz)</label><div class="ikili"><input type="date" id="dVade" aria-label="Hatırlatma tarihi"><input type="time" id="dSaat" aria-label="Hatırlatma saati"></div>
     <label class="lbl">Not</label><input type="text" id="dNot">
     <div class="hata" id="dHata"></div>
     <div class="butonlar">
@@ -516,6 +526,9 @@ function birim(c,n,html){
   return html ? `<span class="has">${fmt(n)} gr has</span>` : fmt(n)+' gr has';
 }
 const tarihKisa = (t)=> new Date(t).toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric'});
+const saatISO = (t)=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+const tarihSaat = (t)=> tarihKisa(t)+' '+saatISO(t);
+function kalanYazi(t){ const ms=t-Date.now(); if(ms<=0) return ''; const dk=Math.ceil(ms/60000); if(dk<60) return dk+' dk'; const sa=Math.round(ms/3600000); if(sa<24) return sa+' saat'; return Math.floor(ms/GUN)+' gün'; }
 const tarihISO = (t)=>{ const d=new Date(t); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 const gunFarki = (t)=> Math.floor((Date.now()-t)/GUN);
 const kalanGun = (t)=> Math.ceil((t-Date.now())/GUN);
@@ -550,7 +563,7 @@ function chipGrubu(id, cb){
 }
 chipGrubu('cins', v=>cins=v);
 chipGrubu('tur', v=>tur=v);
-chipGrubu('vade', v=>{ vadeSecim=v; document.getElementById('vadeTarih').classList.toggle('gorun',v==='tarih'); });
+chipGrubu('vade', v=>{ vadeSecim=v; const ss=document.getElementById('saatSatir'); ss.hidden = v==='yok'; ss.classList.toggle('tarihli', v==='tarih'); });
 
 document.getElementById('ekle').onclick = async ()=>{
   const isim = document.getElementById('isim').value.trim();
@@ -562,14 +575,15 @@ document.getElementById('ekle').onclick = async ()=>{
   if(!isim) return goster('İsim yazmadın.');
   if(!(miktar>0)) return goster('Miktar 0\'dan büyük olmalı.');
   let vade;
-  if(vadeSecim==='tarih'){ const v = document.getElementById('vadeTarih').value; if(!v) return goster('Hatırlatma tarihi seç.'); vade = new Date(v+'T09:00:00').getTime(); }
+  const saat = document.getElementById('vadeSaat').value || '09:00';
+  if(vadeSecim==='tarih'){ const v = document.getElementById('vadeTarih').value; if(!v) return goster('Hatırlatma tarihi seç.'); vade = new Date(v+'T'+saat+':00').getTime(); if(vade<=Date.now()) return goster('Hatırlatma zamanı geçmişte olamaz.'); }
   else if(vadeSecim==='yok') vade = null;
-  else vade = Date.now() + parseInt(vadeSecim)*GUN;
+  else vade = new Date(tarihISO(Date.now() + parseInt(vadeSecim)*GUN)+'T'+saat+':00').getTime();
   hata.style.display='none';
   if(!aktifIsletme){ return goster('Önce işletme oluştur.'); }
   kayitlar.push({ id:yeniId(), isletme:aktifIsletme, isim, tel, cins, miktar, tur, not, tarih:Date.now(), vade });
   await yaz();
-  ['isim','tel','miktar','not','vadeTarih'].forEach(i=>document.getElementById(i).value='');
+  ['isim','tel','miktar','not','vadeTarih'].forEach(i=>document.getElementById(i).value=''); document.getElementById('vadeSaat').value='09:00';
   toast(isim+' deftere eklendi'); titret(10);
   ciz();
 };
@@ -615,7 +629,7 @@ const duzenPerde = document.getElementById('duzenPerde'); let duzenId = null;
 function duzenAc(id){
   const k = kayitlar.find(x=>x.id===id); if(!k) return; duzenId = id;
   document.getElementById('dIsim').value = k.isim; document.getElementById('dTel').value = k.tel||'';
-  document.getElementById('dMiktar').value = k.miktar; document.getElementById('dVade').value = k.vade ? tarihISO(k.vade) : '';
+  document.getElementById('dMiktar').value = k.miktar; document.getElementById('dVade').value = k.vade ? tarihISO(k.vade) : ''; document.getElementById('dSaat').value = k.vade ? saatISO(k.vade) : '09:00';
   document.getElementById('dNot').value = k.not||''; document.getElementById('dHata').style.display='none';
   duzenPerde.classList.add('gorun');
 }
@@ -628,7 +642,7 @@ document.getElementById('dKaydet').onclick = async ()=>{
   if(!isim){ h.textContent='İsim boş olamaz.'; h.style.display='block'; return; }
   if(!(miktar>0)){ h.textContent='Miktar 0\'dan büyük olmalı.'; h.style.display='block'; return; }
   k.isim = isim; k.tel = document.getElementById('dTel').value.trim(); k.miktar = miktar; k.not = document.getElementById('dNot').value.trim();
-  k.vade = v ? new Date(v+'T09:00:00').getTime() : null;
+  k.vade = v ? new Date(v+'T'+(document.getElementById('dSaat').value||'09:00')+':00').getTime() : null;
   duzenPerde.classList.remove('gorun'); await yaz(); toast('Kayıt güncellendi'); ciz();
 };
 
@@ -709,8 +723,8 @@ function kartHTML(k,q){
           ${k.not?`<div class="not">${esc(k.not)}</div>`:''}${odeme}
           <div class="tarihler">
             <div>Yazıldı<b>${tarihKisa(k.tarih)}</b></div>
-            <div class="son">Hatırlatma<b>${k.vade ? tarihKisa(k.vade)+(gec?' · geldi!':'') : 'Yok'}</b></div>
-            ${k.vade ? `<div>${gec?'Geçen':'Kalan'}<b>${gec?(g===0?'bugün':g+' gün'):kal+' gün'}</b></div>` : ''}
+            <div class="son" data-duzen="${k.id}">Hatırlatma<b>${k.vade ? tarihSaat(k.vade)+(gec?' · geldi!':'') : 'Yok · ekle'}</b></div>
+            ${k.vade && !gec ? `<div>Kalan<b>${kalanYazi(k.vade)}</b></div>` : ''}
           </div>
         </div>
       </div>
@@ -753,7 +767,7 @@ function ciz(){
 
   const gecenler = K.filter(geldi);
   const h = document.getElementById('hatirlat');
-  if(gecenler.length){ h.style.display='block'; document.getElementById('hatirlatMetin').textContent = `${gecenler.length} kaydın hatırlatma günü geldi: `+gecenler.map(k=>k.isim).join(', '); }
+  if(gecenler.length){ h.style.display='block'; document.getElementById('hatirlatMetin').textContent = `${gecenler.length} kaydın hatırlatma zamanı geldi: `+gecenler.map(k=>k.isim).join(', '); }
   else h.style.display='none';
 
   const top = {A:{},B:{}}, say = {A:0,B:0};
@@ -833,7 +847,7 @@ async function nativeBildirim(){
   try{
     const izin = await LN.requestPermissions(); if(izin.display!=='granted') return true;
     const eski = await LN.getPending(); if(eski.notifications && eski.notifications.length) await LN.cancel(eski);
-    const list = kayitlar.filter(k=>k.vade).map((k,i)=>({ id: 1000+i, title:'Borç Defteri', body:`${k.isim} — ${birim(k.cins,k.miktar)} (${k.tur==='A'?'Alacaklı':'Borçlu'}) hatırlatma günü geldi`, schedule:{ at:new Date(Math.max(k.vade, Date.now()+60000)) } }));
+    const list = kayitlar.filter(k=>k.vade).map((k,i)=>({ id: 1000+i, title:'Borç Defteri', body:`${k.isim} — ${birim(k.cins,k.miktar)} (${k.tur==='A'?'Alacaklı':'Borçlu'}) hatırlatma zamanı geldi`, schedule:{ at:new Date(Math.max(k.vade, Date.now()+60000)) } }));
     if(list.length) await LN.schedule({notifications:list});
   }catch(e){ console.error(e); }
   return true;
@@ -864,6 +878,18 @@ function eskiKayitlariBagla(){ // işletmesi olmayan eski kayıtlar → aktif (y
   if(n) _yaz();
 }
 window.app.yerelSil = ()=>IDB.sil(KEY);
+// Uygulama açıkken bir hatırlatmanın saati gelirse hemen göster
+let _sonKontrol = Date.now();
+setInterval(async ()=>{
+  const simdi = Date.now();
+  const yeni = kayitlar.filter(k=>k.vade && k.vade>_sonKontrol && k.vade<=simdi);
+  _sonKontrol = simdi;
+  if(!yeni.length) return;
+  ciz();
+  const isl = id=>{ const i=isletmeler.find(x=>x.id===id); return i?i.ad:''; };
+  toast(yeni.length===1 ? `Hatırlatma: ${yeni[0].isim} — ${birim(yeni[0].cins,yeni[0].miktar)}` : `${yeni.length} hatırlatmanın zamanı geldi`);
+  try{ if('Notification' in window && Notification.permission==='granted'){ const reg = await navigator.serviceWorker.getRegistration(); for(const k of yeni){ const b=`${k.isim} — ${birim(k.cins,k.miktar)} (${k.tur==='A'?'Alacaklı':'Borçlu'}) hatırlatma zamanı geldi`; if(reg) reg.showNotification('Borç Defteri'+(isl(k.isletme)?' · '+isl(k.isletme):''),{body:b,tag:k.id+'-'+k.vade,icon:'icon-192.png'}); } } }catch(e){}
+}, 20000);
 window.app.isletmeler = ()=>isletmeler; window.app.isletmeCiz = isletmeCiz;
 window.app.isletmeleriAl = (liste)=>{ if(!liste.length) return; isletmeler = liste; if(!isletmeler.find(i=>i.id===aktifIsletme)) aktifIsletme = isletmeler[0].id; try{ localStorage.setItem(ISL_KEY,JSON.stringify(isletmeler)); }catch(e){} eskiKayitlariBagla(); isletmeCiz(); ciz(); };
 (async ()=>{ isletmeOku(); kayitlar = (await oku()).map(normalize); eskiKayitlariBagla(); isletmeCiz(); formDurum(kayitlar.filter(k=>k.isletme===aktifIsletme).length===0); ciz(); bildirimKur(); })();
@@ -2484,7 +2510,7 @@ if(cfg && cfg.apiKey){ try {
       if(!token) return;
       await setDoc(doc(db,'kullanicilar',uid,'cihazlar',token.replace(/[^A-Za-z0-9]/g,'').slice(-60)), {token, guncel:Date.now(), cihaz:navigator.userAgent.slice(0,140)});
       $('bildirimAlan').innerHTML=''; $('bildirimAcBtn').textContent='Bildirimler açık ✓';
-      if(!sessiz) window.app.toast('Bildirimler açık. Hatırlatma günü sabah 9\'da bildirim gelir.');
+      if(!sessiz) window.app.toast('Bildirimler açık. Her kişinin hatırlatma saatinde bildirim gelir.');
     }catch(e){ console.error('bildirim',e); if(!sessiz) window.app.toast('Bildirim açılamadı: '+(e.code||e.message)); }
   }
   window.app.bildirimAc = ()=>tokenKaydet(false);
