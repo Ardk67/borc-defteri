@@ -888,7 +888,7 @@ setInterval(async ()=>{
   ciz();
   const isl = id=>{ const i=isletmeler.find(x=>x.id===id); return i?i.ad:''; };
   toast(yeni.length===1 ? `Hatırlatma: ${yeni[0].isim} — ${birim(yeni[0].cins,yeni[0].miktar)}` : `${yeni.length} hatırlatmanın zamanı geldi`);
-  try{ if('Notification' in window && Notification.permission==='granted'){ const reg = await navigator.serviceWorker.getRegistration(); for(const k of yeni){ const b=`${k.isim} — ${birim(k.cins,k.miktar)} (${k.tur==='A'?'Alacaklı':'Borçlu'}) hatırlatma zamanı geldi`; if(reg) reg.showNotification('Borç Defteri'+(isl(k.isletme)?' · '+isl(k.isletme):''),{body:b,tag:k.id+'-'+k.vade,icon:'icon-192.png'}); } } }catch(e){}
+  try{ if('Notification' in window && Notification.permission==='granted'){ const reg = await navigator.serviceWorker.getRegistration(); for(const k of yeni){ const b=`${k.isim} — ${birim(k.cins,k.miktar)} (${k.tur==='A'?'Alacaklı':'Borçlu'}) hatırlatma zamanı geldi`; if(reg) reg.showNotification('Borç Defteri'+(isl(k.isletme)?' · '+isl(k.isletme):''),{body:b,tag:k.id+'-'+k.vade,icon:'icon-192.png',silent:false,renotify:true,vibrate:[200,100,200]}); } } }catch(e){}
 }, 20000);
 window.app.isletmeler = ()=>isletmeler; window.app.isletmeCiz = isletmeCiz;
 window.app.isletmeleriAl = (liste)=>{ if(!liste.length) return; isletmeler = liste; if(!isletmeler.find(i=>i.id===aktifIsletme)) aktifIsletme = isletmeler[0].id; try{ localStorage.setItem(ISL_KEY,JSON.stringify(isletmeler)); }catch(e){} eskiKayitlariBagla(); isletmeCiz(); ciz(); };
